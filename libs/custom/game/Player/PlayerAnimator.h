@@ -13,6 +13,8 @@ public:
 
     bool isAnimEnd() const;
 
+    void endSubAnim();
+
     f32 getAnimFrame() const;
     f32 getAnimFrameMax() const;
     f32 getAnimFrameRate() const;
