@@ -1,3 +1,4 @@
+#include <exl/hook/base.hpp>
 #include <mallow/config.hpp>
 #include <mallow/logging/logger.hpp>
 #include <mallow/mallow.hpp>
@@ -388,6 +389,12 @@ struct PlayerActorHakoniwaExeSquat : public mallow::hook::Trampoline<PlayerActor
     }
 };
 
+struct PlayerCarryKeeperIsCarryDuringSpin : public mallow::hook::Inline<PlayerCarryKeeperIsCarryDuringSpin>{
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        if(ctx->X[0] && isGalaxySpin)
+            ctx->X[0] = false;
+    }
+};
 
 struct PadTriggerYHook : public mallow::hook::Trampoline<PadTriggerYHook>{
     static bool Callback(int port){
@@ -509,6 +516,9 @@ extern "C" void userMain() {
     //PlayerStateSwimExeSwimHipDropHeadSliding::InstallAtSymbol("_ZN15PlayerStateSwim25exeSwimHipDropHeadSlidingEv");
     PlayerStateSwimKill::InstallAtSymbol("_ZN15PlayerStateSwim4killEv");
     PlayerSpinCapAttackStartSpinSeparateSwimSurface::InstallAtSymbol("_ZN19PlayerSpinCapAttack28startSpinSeparateSwimSurfaceEP14PlayerAnimator");
+
+    // allow carrying an object during a GalaxySpin
+    PlayerCarryKeeperIsCarryDuringSpin::InstallAtOffset(0x423A24);
 
     // allow triggering spin on roll and squat
     PlayerActorHakoniwaExeRolling::InstallAtSymbol("_ZN19PlayerActorHakoniwa10exeRollingEv");
