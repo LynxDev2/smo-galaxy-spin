@@ -1,3 +1,4 @@
+#include <exl/hook/base.hpp>
 #include <mallow/config.hpp>
 #include <mallow/logging/logger.hpp>
 #include <mallow/mallow.hpp>
@@ -282,8 +283,9 @@ struct PlayerStateSwimExeSwimSpinCap : public mallow::hook::Trampoline<PlayerSta
             al::validateHitSensor(thisPtr->mActor, "GalaxySpin");
             hitBufferCount = 0;
         }
-        if(isGalaxySpin && al::isGreaterStep(thisPtr, 62)) {
+        if(isGalaxySpin && (al::isGreaterStep(thisPtr, 62) || al::isStep(thisPtr, -1))) {
             al::invalidateHitSensor(thisPtr->mActor, "GalaxySpin");
+            isGalaxySpin = false;
         }
     }
 };
@@ -295,8 +297,9 @@ struct PlayerStateSwimExeSwimSpinCapSurface : public mallow::hook::Trampoline<Pl
             al::validateHitSensor(thisPtr->mActor, "GalaxySpin");
             hitBufferCount = 0;
         }
-        if(isGalaxySpin && al::isGreaterStep(thisPtr, 62)) {
+        if(isGalaxySpin && (al::isGreaterStep(thisPtr, 62) || al::isStep(thisPtr, -1))) {
             al::invalidateHitSensor(thisPtr->mActor, "GalaxySpin");
+            isGalaxySpin = false;
         }
     }
 };
@@ -386,6 +389,12 @@ struct PlayerActorHakoniwaExeSquat : public mallow::hook::Trampoline<PlayerActor
     }
 };
 
+struct PlayerCarryKeeperIsCarryDuringSpin : public mallow::hook::Inline<PlayerCarryKeeperIsCarryDuringSpin>{
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        if(ctx->X[0] && isGalaxySpin)
+            ctx->X[0] = false;
+    }
+};
 
 struct PadTriggerYHook : public mallow::hook::Trampoline<PadTriggerYHook>{
     static bool Callback(int port){
@@ -427,7 +436,8 @@ void tryCapSpinAndRethrow(PlayerActorHakoniwa* player, bool a2) {
             }
             else {
                 // tries a standard spin, not allowed to do so
-                player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                //player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                // fakespins on standard spins should not happen in this mod
                 return;
             }
         } else {  // Y pressed => GalaxySpin or fake-GalaxySpin
@@ -466,7 +476,8 @@ void tryCapSpinAndRethrow(PlayerActorHakoniwa* player, bool a2) {
             }
             else {
                 // tries a standard spin, not allowed to do so
-                player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                //player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                // fakespins on standard spins should not happen in this mod
                 return;
             }
         } else {  // Y pressed => GalaxySpin or fake-GalaxySpin
@@ -501,9 +512,13 @@ extern "C" void userMain() {
     PlayerSpinCapAttackIsSeparateSingleSpin::InstallAtSymbol("_ZNK19PlayerSpinCapAttack20isSeparateSingleSpinEv");
     PlayerStateSwimExeSwimSpinCap::InstallAtSymbol("_ZN15PlayerStateSwim14exeSwimSpinCapEv");
     PlayerStateSwimExeSwimSpinCapSurface::InstallAtSymbol("_ZN15PlayerStateSwim21exeSwimSpinCapSurfaceEv");
-    PlayerStateSwimExeSwimHipDropHeadSliding::InstallAtSymbol("_ZN15PlayerStateSwim25exeSwimHipDropHeadSlidingEv");
+    // UPDATE: do not interrupt underwater dive with GalaxySpin
+    //PlayerStateSwimExeSwimHipDropHeadSliding::InstallAtSymbol("_ZN15PlayerStateSwim25exeSwimHipDropHeadSlidingEv");
     PlayerStateSwimKill::InstallAtSymbol("_ZN15PlayerStateSwim4killEv");
     PlayerSpinCapAttackStartSpinSeparateSwimSurface::InstallAtSymbol("_ZN19PlayerSpinCapAttack28startSpinSeparateSwimSurfaceEP14PlayerAnimator");
+
+    // allow carrying an object during a GalaxySpin
+    PlayerCarryKeeperIsCarryDuringSpin::InstallAtOffset(0x423A24);
 
     // allow triggering spin on roll and squat
     PlayerActorHakoniwaExeRolling::InstallAtSymbol("_ZN19PlayerActorHakoniwa10exeRollingEv");
