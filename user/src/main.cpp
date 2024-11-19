@@ -429,7 +429,8 @@ void tryCapSpinAndRethrow(PlayerActorHakoniwa* player, bool a2) {
             }
             else {
                 // tries a standard spin, not allowed to do so
-                player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                //player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                // fakespins on standard spins should not happen in this mod
                 return;
             }
         } else {  // Y pressed => GalaxySpin or fake-GalaxySpin
@@ -468,7 +469,8 @@ void tryCapSpinAndRethrow(PlayerActorHakoniwa* player, bool a2) {
             }
             else {
                 // tries a standard spin, not allowed to do so
-                player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                //player->mPlayerSpinCapAttack->tryStartCapSpinAirMiss(player->mPlayerAnimator);
+                // fakespins on standard spins should not happen in this mod
                 return;
             }
         } else {  // Y pressed => GalaxySpin or fake-GalaxySpin
