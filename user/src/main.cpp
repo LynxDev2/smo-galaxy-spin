@@ -35,6 +35,10 @@ namespace rs {
 namespace PlayerEquipmentFunction {
     bool isEquipmentNoCapThrow(const PlayerEquipmentUser*);
 }
+class PlayerCarryKeeper {
+public:
+    bool isCarry() const;
+};
 
 static void setupLogging() {
     using namespace mallow::log::sink;
@@ -86,9 +90,17 @@ bool isGalaxyAfterStandardSpin = false;  // special case, as switching between s
 bool isStandardAfterGalaxySpin = false;
 int galaxyFakethrowRemainder = -1;  // -1 = inactive, -2 = request to start, positive = remaining frames
 bool triggerGalaxySpin = false;
+bool prevIsCarry = false;
 
 struct PlayerTryActionCapSpinAttack : public mallow::hook::Trampoline<PlayerTryActionCapSpinAttack>{
     static bool Callback(PlayerActorHakoniwa* player, bool a2) {
+        // do not allow Y to trigger both pickup and spin on seeds (for picking up rocks, this function is not called)
+        bool newIsCarry = player->mPlayerCarryKeeper->isCarry();
+        if (newIsCarry && !prevIsCarry) {
+            prevIsCarry = newIsCarry;
+            return false;
+        }
+        prevIsCarry = newIsCarry;
         if (al::isPadTriggerY(-1) && !rs::is2D(player) && !PlayerEquipmentFunction::isEquipmentNoCapThrow(player->mPlayerEquipmentUser)) {
             if(player->mPlayerAnimator->isAnim("SpinSeparate"))
                 return false;
