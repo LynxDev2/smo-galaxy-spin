@@ -371,6 +371,11 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     break;
                 }
             }
+            {
+                const al::Nerve* sourceNrv = al::getSensorHost(source)->getNerveKeeper()->getCurrentNerve();
+                isInHitBuffer |= sourceNrv == getNerveAt(0x1D03268);  // GrowPlantSeedNrvHold
+                isInHitBuffer |= sourceNrv == getNerveAt(0x1D00EC8);  // GrowFlowerSeedNrvHold
+            }
             if(!isInHitBuffer){
                 if(
                     rs::sendMsgCapTrampolineAttack(source, target) ||
@@ -384,7 +389,7 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     al::sendMsgKickStoneAttackReflect(source, target) ||
                     al::sendMsgPlayerSpinAttack(source, target, nullptr)
                 ) {
-                    /*logLine("hit: %s", al::getSensorHost(source)->mActorName);
+                    /*logLine("hit: %s => %s", al::getSensorHost(source)->mActorName, source->mName);
                     const char* name = al::getSensorHost(source)->mActorName;
                     while(*name != 0)
                         mallow::log::log("%d ", *name++);*/
