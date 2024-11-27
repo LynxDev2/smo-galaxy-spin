@@ -140,7 +140,6 @@ public:
         PlayerStateSpinCap* state = keeper->getParent<PlayerStateSpinCap>();
 
         if(al::isFirstStep(state)) {
-            state->mAnimator->endSubAnim();
             state->mAnimator->startAnim("SpinSeparate");
             al::validateHitSensor(state->mActor, "GalaxySpin");
         }
