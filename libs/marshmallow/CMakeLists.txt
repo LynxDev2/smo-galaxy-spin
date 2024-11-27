@@ -17,6 +17,7 @@ target_sources(marshmallow
         mallow/exception/handler.hpp
         mallow/exception/handler.s
         mallow/init/init.cpp
+        mallow/init/initLogging.cpp
         mallow/init/initArgs.hpp
         mallow/init/crt0.s
         mallow/logging/debug.hpp

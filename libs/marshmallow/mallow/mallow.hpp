@@ -7,5 +7,6 @@
 #include <mallow/logging/debug.hpp>
 #include <mallow/logging/logger.hpp>
 #include <mallow/net/socket.hpp>
+#include <mallow/init/initLogging.hpp>
 
 #include <exl/lib.hpp>

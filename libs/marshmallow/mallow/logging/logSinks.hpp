@@ -33,14 +33,23 @@ namespace mallow::log::sink {
     };
 
     class NetworkSink : public LogSink {
-        static bool initialized;
+        bool reconnect = false;
+        u64 lastReconnect = 0;
         s32 fileDescriptor = -1;
         nn::os::Mutex mutex;  // prevent concurrent writes to the socket
+        const char *host;
+        u16 port;
 
         void send(const char* buffer, std::size_t size);
 
+        enum class ConnectResult {
+            SUCCESS, ALREADY_INITIALIZED, NETWORK_FAILED, SOCKET_FAILED, RESOLVE_FAILED, NO_SERVER
+        };
+
+        ConnectResult connect();
+
     public:
-        NetworkSink(const char* host, u16 port);
+        NetworkSink(const char* host, u16 port, bool tryReconnect);
 
         // no copying or moving
         NetworkSink(const NetworkSink&) = delete;
