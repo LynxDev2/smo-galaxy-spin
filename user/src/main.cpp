@@ -397,8 +397,12 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     hitBuffer[hitBufferCount++] = al::getSensorHost(source);
                     al::LiveActor* playerModel = thisPtr->mPlayerModelHolder->findModelActor("Normal");
                     if(playerModel){
-                        sead::Vector3 sourceOffsetFromPlayer = al::getTrans(al::getSensorHost(source));
-                        al::tryEmitEffect(playerModel, "Hit", &sourceOffsetFromPlayer);
+                        sead::Vector3 sourceEffectFromPlayer = al::getTrans(playerModel);
+                        sourceEffectFromPlayer.y += 50.0f;
+                        sead::Vector3 direction = (al::getTrans(al::getSensorHost(source)) - al::getTrans(playerModel));
+                        direction.normalize();
+                        sourceEffectFromPlayer += direction * 75.0f;
+                        al::tryEmitEffect(playerModel, "Hit", &sourceEffectFromPlayer);
                     }
                     return;
                 }
