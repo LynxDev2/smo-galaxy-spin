@@ -57,11 +57,11 @@ bool isPadTriggerGalaxySpin(int port){
             return al::isPadTriggerL(port);
         case 'R':
             return al::isPadTriggerR(port);
-        case 'Y':
-            return al::isPadTriggerY(port);
         case 'X':
-        default:
             return al::isPadTriggerX(port);
+        case 'Y':
+        default:
+            return al::isPadTriggerY(port);
     }
 }
 
@@ -536,8 +536,10 @@ struct InputIsTriggerActionXexclusivelyHook : public mallow::hook::Trampoline<In
         switch (mallow::config::getConfg<ModOptions>()->spinButton) {
             case 'Y':
                 canCapThrow = al::isPadTriggerX(port);
+                break;
             case 'X':
                 canCapThrow = al::isPadTriggerY(port);
+                break;
         }
         return Orig(actor, port) && canCapThrow;
     }
