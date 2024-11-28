@@ -372,7 +372,11 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     break;
                 }
             }
-            isInHitBuffer |= al::isEqualSubString(typeid(al::getSensorHost(source)).name(),"Seed");  // Seed Check
+            if (al::isEqualSubString(typeid(al::getSensorHost(source)).name(),"Seed")) {
+                const al::Nerve* sourceNrv = al::getSensorHost(source)->getNerveKeeper()->getCurrentNerve();
+                isInHitBuffer |= sourceNrv == getNerveAt(0x1D03268);  // GrowPlantSeedNrvHold
+                isInHitBuffer |= sourceNrv == getNerveAt(0x1D00EC8);  // GrowFlowerSeedNrvHold
+            }
             if(!isInHitBuffer){
                 if(
                     rs::sendMsgCapTrampolineAttack(source, target) ||
