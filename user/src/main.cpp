@@ -359,6 +359,7 @@ namespace rs {
     bool sendMsgHammerBrosHammerEnemyAttack(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapReflect(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    al::HitSensor* tryGetCollidedWallSensor(IUsePlayerCollision const* collider);
 }
 
 struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSensorHook>{
@@ -380,6 +381,8 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     al::sendMsgExplosion(source, target, nullptr) ||
                     rs::sendMsgHackAttack(source, target) ||
                     rs::sendMsgHammerBrosHammerEnemyAttack(source, target) ||
+                    //allow hammer attack for MarchingCubes
+                    (rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa) && rs::sendMsgHammerBrosHammerEnemyAttack(rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa), target)) ||
                     rs::sendMsgCapReflect(source, target) ||
                     rs::sendMsgCapAttack(source, target) ||
                     al::sendMsgKickStoneAttackReflect(source, target) ||
