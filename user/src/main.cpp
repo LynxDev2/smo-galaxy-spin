@@ -57,11 +57,11 @@ bool isPadTriggerGalaxySpin(int port){
             return al::isPadTriggerL(port);
         case 'R':
             return al::isPadTriggerR(port);
-        case 'Y':
-            return al::isPadTriggerY(port);
         case 'X':
-        default:
             return al::isPadTriggerX(port);
+        case 'Y':
+        default:
+            return al::isPadTriggerY(port);
     }
 }
 
@@ -359,6 +359,7 @@ namespace rs {
     bool sendMsgHammerBrosHammerEnemyAttack(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapReflect(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    al::HitSensor* tryGetCollidedWallSensor(IUsePlayerCollision const* collider);
 }
 
 struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSensorHook>{
@@ -371,7 +372,7 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     break;
                 }
             }
-            {
+            if (al::isEqualSubString(typeid(al::getSensorHost(source)).name(),"Seed")) {
                 const al::Nerve* sourceNrv = al::getSensorHost(source)->getNerveKeeper()->getCurrentNerve();
                 isInHitBuffer |= sourceNrv == getNerveAt(0x1D03268);  // GrowPlantSeedNrvHold
                 isInHitBuffer |= sourceNrv == getNerveAt(0x1D00EC8);  // GrowFlowerSeedNrvHold
@@ -384,6 +385,8 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     al::sendMsgExplosion(source, target, nullptr) ||
                     rs::sendMsgHackAttack(source, target) ||
                     rs::sendMsgHammerBrosHammerEnemyAttack(source, target) ||
+                    //allow hammer attack for MarchingCubes
+                    (rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa) && rs::sendMsgHammerBrosHammerEnemyAttack(rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa), target)) ||
                     rs::sendMsgCapReflect(source, target) ||
                     rs::sendMsgCapAttack(source, target) ||
                     al::sendMsgKickStoneAttackReflect(source, target) ||
@@ -540,8 +543,10 @@ struct InputIsTriggerActionXexclusivelyHook : public mallow::hook::Trampoline<In
         switch (mallow::config::getConfg<ModOptions>()->spinButton) {
             case 'Y':
                 canCapThrow = al::isPadTriggerX(port);
+                break;
             case 'X':
                 canCapThrow = al::isPadTriggerY(port);
+                break;
         }
         return Orig(actor, port) && canCapThrow;
     }
