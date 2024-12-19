@@ -262,6 +262,30 @@ struct PlayerStateSpinCapFall : public mallow::hook::Trampoline<PlayerStateSpinC
     }
 };
 
+struct PlayerStateSpinCapIsEnableCancelHipDrop : public mallow::hook::Trampoline<PlayerStateSpinCapIsEnableCancelHipDrop>{
+    static bool Callback(PlayerStateSpinCap* state){
+        return Orig(state) || (al::isNerve(state, &GalaxySpinAir) && al::isGreaterStep(state, 10));
+    }
+};
+
+struct PlayerStateSpinCapIsEnableCancelAir : public mallow::hook::Trampoline<PlayerStateSpinCapIsEnableCancelAir>{
+    static bool Callback(PlayerStateSpinCap* state){
+        return Orig(state) && !(!state->mIsDead && al::isNerve(state, &GalaxySpinAir) && al::isLessEqualStep(state, 22));
+    }
+};
+
+struct PlayerStateSpinCapIsSpinAttackAir : public mallow::hook::Trampoline<PlayerStateSpinCapIsSpinAttackAir>{
+    static bool Callback(PlayerStateSpinCap* state){
+        return Orig(state) || (!state->mIsDead && al::isNerve(state, &GalaxySpinAir) && al::isLessEqualStep(state, 22));
+    }
+};
+
+struct PlayerStateSpinCapIsEnableCancelGround : public mallow::hook::Trampoline<PlayerStateSpinCapIsEnableCancelGround>{
+    static bool Callback(PlayerStateSpinCap* state){
+        return Orig(state) || (al::isNerve(state, &GalaxySpinGround) && al::isGreaterStep(state, 10));
+    }
+};
+
 struct PlayerConstGetSpinAirSpeedMax : public mallow::hook::Trampoline<PlayerConstGetSpinAirSpeedMax> {
     static float Callback(PlayerConst* playerConst) {
         if(isGalaxySpin)
@@ -351,14 +375,19 @@ struct PlayerSpinCapAttackStartSpinSeparateSwimSurface : public mallow::hook::Tr
 
 namespace al {
     bool sendMsgKickStoneAttackReflect(al::HitSensor* receiver, al::HitSensor* sender);
+    bool sendMsgPlayerTrampleReflect(HitSensor* receiver, HitSensor* sender, ComboCounter* comboCounter);    
+    bool sendMsgPlayerAttackTrample(HitSensor* receiver, HitSensor* sender, ComboCounter* comboCounter);
 }
 
 namespace rs {
     bool sendMsgHackAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    bool sendMsgPlayerCapTrample(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapTrampolineAttack(al::HitSensor* receiver, al::HitSensor* sender);
-    bool sendMsgHammerBrosHammerEnemyAttack(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapReflect(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    bool sendMsgBlowObjAttackReflect(al::HitSensor* receiver, al::HitSensor* sender);  
+    bool sendMsgBlowObjAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    bool sendMsgHammerBrosHammerEnemyAttack(al::HitSensor* receiver, al::HitSensor* sender);
     al::HitSensor* tryGetCollidedWallSensor(IUsePlayerCollision const* collider);
 }
 
@@ -372,25 +401,33 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     break;
                 }
             }
-            if (al::isEqualSubString(typeid(al::getSensorHost(source)).name(),"Seed")) {
+            {
                 const al::Nerve* sourceNrv = al::getSensorHost(source)->getNerveKeeper()->getCurrentNerve();
                 isInHitBuffer |= sourceNrv == getNerveAt(0x1D03268);  // GrowPlantSeedNrvHold
                 isInHitBuffer |= sourceNrv == getNerveAt(0x1D00EC8);  // GrowFlowerSeedNrvHold
+            
+                // do not "disable" when trying to hit BlockQuestion with TenCoin
+                isInHitBuffer &= sourceNrv != getNerveAt(0x1CD6758);
             }
             if(!isInHitBuffer){
                 if(
                     rs::sendMsgCapTrampolineAttack(source, target) ||
-                    // disallow fire attack on sheep
-                    (!al::isEqualString(al::getSensorHost(source)->mActorName, "コレクトアニマル") && al::sendMsgEnemyAttackFire(source, target, nullptr)) ||
-                    al::sendMsgExplosion(source, target, nullptr) ||
                     rs::sendMsgHackAttack(source, target) ||
                     rs::sendMsgHammerBrosHammerEnemyAttack(source, target) ||
-                    //allow hammer attack for MarchingCubes
-                    (rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa) && rs::sendMsgHammerBrosHammerEnemyAttack(rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa), target)) ||
+                    al::sendMsgExplosion(source, target, nullptr) ||
+                    
+                    // disallow fire attack on sheep
+                    (!al::isEqualString(al::getSensorHost(source)->mActorName, "コレクトアニマル") && al::sendMsgEnemyAttackFire(source, target, nullptr)) ||
+
+                    rs::sendMsgBlowObjAttackReflect(source, target) ||
+                    rs::sendMsgBlowObjAttack(source, target) ||
                     rs::sendMsgCapReflect(source, target) ||
                     rs::sendMsgCapAttack(source, target) ||
-                    al::sendMsgKickStoneAttackReflect(source, target) ||
-                    al::sendMsgPlayerSpinAttack(source, target, nullptr)
+                    
+                    al::sendMsgPlayerTrampleReflect(source, target, nullptr) ||
+                    al::sendMsgPlayerAttackTrample(source, target, nullptr) || 
+                    al::sendMsgPlayerSpinAttack(source, target, nullptr) ||
+                    al::sendMsgKickStoneAttackReflect(source, target)
                 ) {
                     /*logLine("hit: %s => %s", al::getSensorHost(source)->mActorName, source->mName);
                     const char* name = al::getSensorHost(source)->mActorName;
@@ -454,6 +491,11 @@ struct PadTriggerYHook : public mallow::hook::Trampoline<PadTriggerYHook>{
 struct PlayerMovementHook : public mallow::hook::Trampoline<PlayerMovementHook>{
     static void Callback(PlayerActorHakoniwa* thisPtr){
         Orig(thisPtr);
+        al::HitSensor* sensor = al::getHitSensor(thisPtr, "GalaxySpin");
+        if(sensor && sensor->mIsValid) {
+            if(rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa))
+                thisPtr->attackSensor(sensor, rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa));
+        }
     }
 };
 
@@ -573,6 +615,10 @@ extern "C" void userMain() {
     PlayerSpinCapAttackAppear::InstallAtSymbol("_ZN18PlayerStateSpinCap6appearEv");
     PlayerStateSpinCapKill::InstallAtSymbol("_ZN18PlayerStateSpinCap4killEv");
     PlayerStateSpinCapFall::InstallAtSymbol("_ZN18PlayerStateSpinCap7exeFallEv");
+    PlayerStateSpinCapIsEnableCancelHipDrop::InstallAtSymbol("_ZNK18PlayerStateSpinCap21isEnableCancelHipDropEv");
+    PlayerStateSpinCapIsEnableCancelAir::InstallAtSymbol("_ZNK18PlayerStateSpinCap17isEnableCancelAirEv");
+    PlayerStateSpinCapIsSpinAttackAir::InstallAtSymbol("_ZNK18PlayerStateSpinCap15isSpinAttackAirEv");
+    PlayerStateSpinCapIsEnableCancelGround::InstallAtSymbol("_ZNK18PlayerStateSpinCap20isEnableCancelGroundEv");
     PlayerSpinCapAttackIsSeparateSingleSpin::InstallAtSymbol("_ZNK19PlayerSpinCapAttack20isSeparateSingleSpinEv");
     PlayerStateSwimExeSwimSpinCap::InstallAtSymbol("_ZN15PlayerStateSwim14exeSwimSpinCapEv");
     PlayerStateSwimExeSwimSpinCapSurface::InstallAtSymbol("_ZN15PlayerStateSwim21exeSwimSpinCapSurfaceEv");
