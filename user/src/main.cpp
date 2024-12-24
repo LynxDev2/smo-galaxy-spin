@@ -81,6 +81,8 @@ int galaxyFakethrowRemainder = -1;  // -1 = inactive, -2 = request to start, pos
 bool triggerGalaxySpin = false;
 bool prevIsCarry = false;
 
+int galaxySensorRemaining = -1;
+
 struct PlayerTryActionCapSpinAttack : public mallow::hook::Trampoline<PlayerTryActionCapSpinAttack>{
     static bool Callback(PlayerActorHakoniwa* player, bool a2) {
         // do not allow Y to trigger both pickup and spin on seeds (for picking up rocks, this function is not called)
@@ -119,7 +121,9 @@ public:
         if(al::isFirstStep(state)) {
             state->mAnimator->endSubAnim();
             state->mAnimator->startAnim("SpinSeparate");
+            state->mAnimator->startSubAnim("SpinSeparate");
             al::validateHitSensor(state->mActor, "GalaxySpin");
+            galaxySensorRemaining = 21;
         }
 
         state->updateSpinGroundNerve();
@@ -142,6 +146,7 @@ public:
         if(al::isFirstStep(state)) {
             state->mAnimator->startAnim("SpinSeparate");
             al::validateHitSensor(state->mActor, "GalaxySpin");
+            galaxySensorRemaining = 21;
         }
 
         state->updateSpinAirNerve();
@@ -235,11 +240,11 @@ struct PlayerSpinCapAttackAppear : public mallow::hook::Trampoline<PlayerSpinCap
 struct PlayerStateSpinCapKill : public mallow::hook::Trampoline<PlayerStateSpinCapKill>{
     static void Callback(PlayerStateSpinCap* state){
         Orig(state);
-        isGalaxySpin = false;
         canStandardSpin = true;
         canGalaxySpin = true;
         galaxyFakethrowRemainder = -1;
-        al::invalidateHitSensor(state->mActor, "GalaxySpin");
+        // do not invalidate hitsensor/clear `isGalaxySpin`,
+        // because Mario might go into a jump, which should continue the spin
     }
 };
 
@@ -251,6 +256,7 @@ struct PlayerStateSpinCapFall : public mallow::hook::Trampoline<PlayerStateSpinC
             galaxyFakethrowRemainder = 21;
             al::validateHitSensor(state->mActor, "GalaxySpin");
             state->mAnimator->startAnim("SpinSeparate");
+            galaxySensorRemaining = 21;
         }
         else if(galaxyFakethrowRemainder > 0) {
             galaxyFakethrowRemainder--;
@@ -370,6 +376,20 @@ struct PlayerSpinCapAttackStartSpinSeparateSwimSurface : public mallow::hook::Tr
 
         animator->startAnim("SpinSeparateSwim");
         animator->startSubAnim("SpinSeparateSwim");
+    }
+};
+
+struct DisallowCancelOnUnderwaterSpinPatch : public mallow::hook::Inline<DisallowCancelOnUnderwaterSpinPatch> {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        if(isGalaxySpin)
+            ctx->W[20] = true;
+    }
+};
+
+struct DisallowCancelOnWaterSurfaceSpinPatch : public mallow::hook::Inline<DisallowCancelOnWaterSurfaceSpinPatch> {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        if(isGalaxySpin)
+            ctx->W[21] = true;
     }
 };
 
@@ -495,6 +515,15 @@ struct PlayerMovementHook : public mallow::hook::Trampoline<PlayerMovementHook>{
         if(sensor && sensor->mIsValid) {
             if(rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa))
                 thisPtr->attackSensor(sensor, rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa));
+        }
+        
+        if(galaxySensorRemaining > 0) {
+            galaxySensorRemaining--;
+            if(galaxySensorRemaining == 0) {
+                al::invalidateHitSensor(thisPtr, "GalaxySpin");
+                isGalaxySpin = false;
+                galaxySensorRemaining = -1;
+            }
         }
     }
 };
@@ -661,4 +690,7 @@ extern "C" void userMain() {
     yButtonPatcher.WriteInst(exl::armv8::inst::Movk(exl::armv8::reg::W1, 100));  // isTriggerAction
     yButtonPatcher.Seek(0x44C5F0);
     yButtonPatcher.WriteInst(exl::armv8::inst::Movk(exl::armv8::reg::W1, 100));  // isTriggerCarryStart
+
+    DisallowCancelOnUnderwaterSpinPatch::InstallAtOffset(0x489F30);
+    DisallowCancelOnWaterSurfaceSpinPatch::InstallAtOffset(0x48A3C8);
 }
