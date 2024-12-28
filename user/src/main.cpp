@@ -81,6 +81,8 @@ int galaxyFakethrowRemainder = -1;  // -1 = inactive, -2 = request to start, pos
 bool triggerGalaxySpin = false;
 bool prevIsCarry = false;
 
+int galaxySensorRemaining = -1;
+
 struct PlayerTryActionCapSpinAttack : public mallow::hook::Trampoline<PlayerTryActionCapSpinAttack>{
     static bool Callback(PlayerActorHakoniwa* player, bool a2) {
         // do not allow Y to trigger both pickup and spin on seeds (for picking up rocks, this function is not called)
@@ -119,7 +121,9 @@ public:
         if(al::isFirstStep(state)) {
             state->mAnimator->endSubAnim();
             state->mAnimator->startAnim("SpinSeparate");
+            state->mAnimator->startSubAnim("SpinSeparate");
             al::validateHitSensor(state->mActor, "GalaxySpin");
+            galaxySensorRemaining = 21;
         }
 
         state->updateSpinGroundNerve();
@@ -142,6 +146,7 @@ public:
         if(al::isFirstStep(state)) {
             state->mAnimator->startAnim("SpinSeparate");
             al::validateHitSensor(state->mActor, "GalaxySpin");
+            galaxySensorRemaining = 21;
         }
 
         state->updateSpinAirNerve();
@@ -235,11 +240,11 @@ struct PlayerSpinCapAttackAppear : public mallow::hook::Trampoline<PlayerSpinCap
 struct PlayerStateSpinCapKill : public mallow::hook::Trampoline<PlayerStateSpinCapKill>{
     static void Callback(PlayerStateSpinCap* state){
         Orig(state);
-        isGalaxySpin = false;
         canStandardSpin = true;
         canGalaxySpin = true;
         galaxyFakethrowRemainder = -1;
-        al::invalidateHitSensor(state->mActor, "GalaxySpin");
+        // do not invalidate hitsensor/clear `isGalaxySpin`,
+        // because Mario might go into a jump, which should continue the spin
     }
 };
 
@@ -251,6 +256,7 @@ struct PlayerStateSpinCapFall : public mallow::hook::Trampoline<PlayerStateSpinC
             galaxyFakethrowRemainder = 21;
             al::validateHitSensor(state->mActor, "GalaxySpin");
             state->mAnimator->startAnim("SpinSeparate");
+            galaxySensorRemaining = 21;
         }
         else if(galaxyFakethrowRemainder > 0) {
             galaxyFakethrowRemainder--;
@@ -373,21 +379,36 @@ struct PlayerSpinCapAttackStartSpinSeparateSwimSurface : public mallow::hook::Tr
     }
 };
 
+struct DisallowCancelOnUnderwaterSpinPatch : public mallow::hook::Inline<DisallowCancelOnUnderwaterSpinPatch> {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        if(isGalaxySpin)
+            ctx->W[20] = true;
+    }
+};
+
+struct DisallowCancelOnWaterSurfaceSpinPatch : public mallow::hook::Inline<DisallowCancelOnWaterSurfaceSpinPatch> {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        if(isGalaxySpin)
+            ctx->W[21] = true;
+    }
+};
+
 namespace al {
-    bool sendMsgKickStoneAttackReflect(al::HitSensor* receiver, al::HitSensor* sender);
-    bool sendMsgPlayerTrampleReflect(HitSensor* receiver, HitSensor* sender, ComboCounter* comboCounter);    
+    bool sendMsgPlayerTrampleReflect(HitSensor* receiver, HitSensor* sender, ComboCounter* comboCounter);  
     bool sendMsgPlayerAttackTrample(HitSensor* receiver, HitSensor* sender, ComboCounter* comboCounter);
+    bool sendMsgKickStoneAttackReflect(al::HitSensor* receiver, al::HitSensor* sender);
 }
 
 namespace rs {
-    bool sendMsgHackAttack(al::HitSensor* receiver, al::HitSensor* sender);
-    bool sendMsgPlayerCapTrample(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapTrampolineAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    bool sendMsgHackAttack(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapReflect(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgCapAttack(al::HitSensor* receiver, al::HitSensor* sender);
     bool sendMsgBlowObjAttackReflect(al::HitSensor* receiver, al::HitSensor* sender);  
     bool sendMsgBlowObjAttack(al::HitSensor* receiver, al::HitSensor* sender);
-    bool sendMsgHammerBrosHammerEnemyAttack(al::HitSensor* receiver, al::HitSensor* sender);
+    bool sendMsgCapItemGet(al::HitSensor* receiver, al::HitSensor* sender);
+    // sendMsgExplosion already does the same
+    // bool sendMsgHammerBrosHammerEnemyAttack(al::HitSensor* receiver, al::HitSensor* sender);
     al::HitSensor* tryGetCollidedWallSensor(IUsePlayerCollision const* collider);
 }
 
@@ -401,10 +422,11 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                     break;
                 }
             }
-            {
+            if(al::getSensorHost(source) && al::getSensorHost(source)->getNerveKeeper()) {
                 const al::Nerve* sourceNrv = al::getSensorHost(source)->getNerveKeeper()->getCurrentNerve();
                 isInHitBuffer |= sourceNrv == getNerveAt(0x1D03268);  // GrowPlantSeedNrvHold
                 isInHitBuffer |= sourceNrv == getNerveAt(0x1D00EC8);  // GrowFlowerSeedNrvHold
+                isInHitBuffer |= sourceNrv == getNerveAt(0x1D22B78);  // RadishNrvHold
             
                 // do not "disable" when trying to hit BlockQuestion with TenCoin
                 isInHitBuffer &= sourceNrv != getNerveAt(0x1CD6758);
@@ -413,20 +435,22 @@ struct PlayerAttackSensorHook : public mallow::hook::Trampoline<PlayerAttackSens
                 if(
                     rs::sendMsgCapTrampolineAttack(source, target) ||
                     rs::sendMsgHackAttack(source, target) ||
-                    rs::sendMsgHammerBrosHammerEnemyAttack(source, target) ||
-                    al::sendMsgExplosion(source, target, nullptr) ||
-                    
-                    // disallow fire attack on sheep
-                    (!al::isEqualString(al::getSensorHost(source)->mActorName, "コレクトアニマル") && al::sendMsgEnemyAttackFire(source, target, nullptr)) ||
-
-                    rs::sendMsgBlowObjAttackReflect(source, target) ||
-                    rs::sendMsgBlowObjAttack(source, target) ||
+                  
                     rs::sendMsgCapReflect(source, target) ||
-                    rs::sendMsgCapAttack(source, target) ||
-                    
+                    rs::sendMsgBlowObjAttackReflect(source, target) ||
                     al::sendMsgPlayerTrampleReflect(source, target, nullptr) ||
+
+                    al::sendMsgExplosion(source, target, nullptr) ||
+                    //rs::sendMsgHammerBrosHammerEnemyAttack(source, target)
+                    // disallow fire attack on sheep
+                    //(!al::isEqualString(al::getSensorHost(source)->mActorName, "コレクトアニマル") && al::sendMsgEnemyAttackFire(source, target, nullptr)) ||
+
+                    rs::sendMsgCapAttack(source, target) ||                  
+                    rs::sendMsgBlowObjAttack(source, target) ||
                     al::sendMsgPlayerAttackTrample(source, target, nullptr) || 
+                    
                     al::sendMsgPlayerSpinAttack(source, target, nullptr) ||
+                    rs::sendMsgCapItemGet(source, target) ||
                     al::sendMsgKickStoneAttackReflect(source, target)
                 ) {
                     /*logLine("hit: %s => %s", al::getSensorHost(source)->mActorName, source->mName);
@@ -475,7 +499,15 @@ struct PlayerActorHakoniwaExeSquat : public mallow::hook::Trampoline<PlayerActor
 
 struct PlayerCarryKeeperIsCarryDuringSpin : public mallow::hook::Inline<PlayerCarryKeeperIsCarryDuringSpin>{
     static void Callback(exl::hook::InlineCtx* ctx) {
-        if(ctx->X[0] && isGalaxySpin)
+        // if either currently in galaxyspin or already finished galaxyspin while still in-air
+        if(ctx->X[0] && (isGalaxySpin || !canGalaxySpin))
+            ctx->X[0] = false;
+    }
+};
+struct PlayerCarryKeeperIsCarryDuringSwimSpin : public mallow::hook::Inline<PlayerCarryKeeperIsCarryDuringSwimSpin>{
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        // if either currently in galaxyspin
+        if(ctx->X[0] && (isGalaxySpin || triggerGalaxySpin))
             ctx->X[0] = false;
     }
 };
@@ -496,6 +528,23 @@ struct PlayerMovementHook : public mallow::hook::Trampoline<PlayerMovementHook>{
             if(rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa))
                 thisPtr->attackSensor(sensor, rs::tryGetCollidedWallSensor(thisPtr->mPlayerColliderHakoniwa));
         }
+        
+        if(galaxySensorRemaining > 0) {
+            galaxySensorRemaining--;
+            if(galaxySensorRemaining == 0) {
+                al::invalidateHitSensor(thisPtr, "GalaxySpin");
+                isGalaxySpin = false;
+                galaxySensorRemaining = -1;
+            }
+        }
+
+        /*static int sensorActiveSince = -1;
+        if(sensor && sensor->mIsValid) {
+            sensorActiveSince++;
+        } else if(sensorActiveSince != -1) {
+            logLine("Sensor has been active for %d frames", sensorActiveSince);
+            sensorActiveSince = -1;
+        }*/
     }
 };
 
@@ -629,6 +678,7 @@ extern "C" void userMain() {
 
     // allow carrying an object during a GalaxySpin
     PlayerCarryKeeperIsCarryDuringSpin::InstallAtOffset(0x423A24);
+    PlayerCarryKeeperIsCarryDuringSwimSpin::InstallAtOffset(0x489EE8);
 
     // allow triggering spin on roll and squat
     PlayerActorHakoniwaExeRolling::InstallAtSymbol("_ZN19PlayerActorHakoniwa10exeRollingEv");
@@ -661,4 +711,11 @@ extern "C" void userMain() {
     yButtonPatcher.WriteInst(exl::armv8::inst::Movk(exl::armv8::reg::W1, 100));  // isTriggerAction
     yButtonPatcher.Seek(0x44C5F0);
     yButtonPatcher.WriteInst(exl::armv8::inst::Movk(exl::armv8::reg::W1, 100));  // isTriggerCarryStart
+    /*
+    // Remove Cappy eyes while ide
+    exl::patch::CodePatcher eyePatcher(0x41F7E4);
+    eyePatcher.WriteInst(exl::armv8::inst::Movk(exl::armv8::reg::W0, 0));
+    */
+    DisallowCancelOnUnderwaterSpinPatch::InstallAtOffset(0x489F30);
+    DisallowCancelOnWaterSurfaceSpinPatch::InstallAtOffset(0x48A3C8);
 }
